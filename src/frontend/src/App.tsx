@@ -1,6 +1,7 @@
 import { Toaster } from "@/components/ui/sonner";
 import { Camera, ClockIcon, GitCompare } from "lucide-react";
 import { useState } from "react";
+import InstallBanner from "./components/InstallBanner";
 import AnalysePage from "./pages/AnalysePage";
 import ComparePage from "./pages/ComparePage";
 import HistoryPage from "./pages/HistoryPage";
@@ -141,6 +142,8 @@ export default function App() {
           },
         }}
       />
+
+      <InstallBanner />
     </div>
   );
 }

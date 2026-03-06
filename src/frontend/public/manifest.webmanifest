@@ -1,0 +1,25 @@
+{
+  "name": "Food Colour Analyser",
+  "short_name": "Colour Analyser",
+  "description": "CIE L*a*b* food colour analysis — extract L*, a*, b*, Chroma and Whiteness Index from food images",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#1a2233",
+  "background_color": "#0f1624",
+  "categories": ["food", "productivity", "utilities"],
+  "icons": [
+    {
+      "src": "/assets/generated/pwa-icon-192.dim_192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/assets/generated/pwa-icon-512-transparent.dim_512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

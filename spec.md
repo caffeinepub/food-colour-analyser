@@ -1,45 +1,36 @@
 # Food Colour Analyser
 
 ## Current State
-
-- Single-image analysis page (AnalysePage) that extracts CIE L*a*b*, Chroma, Whiteness Index, and RGB from the central 50% of an uploaded/captured image.
-- History page that lists saved analyses with export (Excel/PDF).
-- Utility functions: `colorUtils.ts` (rgbToLab, rgbToXyz, xyzToLab, chroma, whiteness, hex), `exportUtils.ts`, `storage.ts`.
-- Two-tab navigation: Analyse | History.
-- No image comparison feature exists.
+A full-stack food colour analysis web app with:
+- CIE L*a*b*, Chroma, and Whiteness Index extraction from uploaded food images
+- Comparison mode between two images (RGB/HEX, HSL/HSV, CIELAB differences)
+- PDF export including the original image + L*, a*, b* channel visualisation maps
+- Excel export of results
+- React + Vite frontend; already has basic mobile meta tags (apple-mobile-web-app-capable, theme-color) but NO web manifest, NO service worker, NO install prompt
 
 ## Requested Changes (Diff)
 
 ### Add
-- A third tab "Compare" in the bottom navigation.
-- `ComparePage.tsx` — side-by-side comparison of two food images with:
-  - Image A and Image B upload/camera capture slots.
-  - Trigger button "Compare Colours" that analyses both images.
-  - **Colour Difference** section: ΔE*ab (CIE 1976) with a descriptive scale label (imperceptible / noticeable / large), and a visual delta bar.
-  - **Component-Level Differences (RGB/HEX)**: shows RGB values for A and B, per-channel delta (ΔR, ΔG, ΔB), hex swatches.
-  - **Perceptual Properties (HSL/HSV)**: H, S, L (HSL) and H, S, V (HSV) for A and B with per-property deltas.
-  - **Colorimetric Coordinates (CIELAB)**: L*, a*, b*, Chroma, Whiteness Index for A and B with per-value deltas.
-  - Export comparison as Excel and PDF (new comparison-specific export functions).
-- New utility functions in `colorUtils.ts`:
-  - `rgbToHsl(r, g, b)` → { h, s, l }
-  - `rgbToHsv(r, g, b)` → { h, s, v }
-  - `computeDeltaE(lab1, lab2)` → number (CIE 1976 ΔE*ab = sqrt(ΔL²+Δa²+Δb²))
-  - `deltaELabel(deltaE)` → descriptive string
-- New export functions in `exportUtils.ts`:
-  - `exportComparisonToExcel(comparison, filename)`
-  - `exportComparisonToPDF(comparison, filename)`
+- `public/manifest.webmanifest` -- full PWA web app manifest with name, short_name, icons, display, start_url, theme_color, background_color, orientation, categories
+- `public/sw.js` -- service worker that caches the app shell (HTML, JS, CSS, assets) for offline use; uses a cache-first strategy for static assets
+- PWA icon set: 192x192 and 512x512 PNG icons (generated) placed in `public/icons/`
+- `<link rel="manifest">` tag in `index.html`
+- In-app "Install App" banner/button component that listens for the `beforeinstallprompt` event and lets users install to their Android home screen
+- `vite-plugin-pwa` OR manual service worker registration in `main.tsx` (manual approach preferred since vite-plugin-pwa is not in package.json)
 
 ### Modify
-- `App.tsx`: add "Compare" tab with GitCompare icon; pass tab state to nav; render ComparePage.
-- `colorUtils.ts`: add HSL, HSV, ΔE functions.
-- `exportUtils.ts`: add comparison export functions.
+- `index.html` -- add `<link rel="manifest" href="/manifest.webmanifest">` and a maskable-icon apple-touch-icon link
+- `src/main.tsx` -- register the service worker after React mounts
 
 ### Remove
-- Nothing removed.
+- Nothing
 
 ## Implementation Plan
-
-1. Add `rgbToHsl`, `rgbToHsv`, `computeDeltaE`, `deltaELabel` to `colorUtils.ts`.
-2. Add `exportComparisonToExcel` and `exportComparisonToPDF` to `exportUtils.ts`.
-3. Create `src/frontend/src/pages/ComparePage.tsx` with full comparison UI.
-4. Update `App.tsx` to add the Compare tab and render `ComparePage`.
+1. Generate 192x192 and 512x512 app icons
+2. Write `public/manifest.webmanifest` referencing those icons
+3. Write `public/sw.js` with cache-first strategy for static assets
+4. Update `index.html` to link the manifest and apple-touch-icon
+5. Update `main.tsx` to register `/sw.js` via `navigator.serviceWorker.register`
+6. Add `InstallBanner` component that captures `beforeinstallprompt` and shows an unobtrusive install button (dismissed via localStorage flag)
+7. Mount `InstallBanner` in `App.tsx`
+8. Validate (typecheck + build)
