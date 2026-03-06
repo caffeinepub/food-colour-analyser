@@ -1,12 +1,13 @@
 import { Toaster } from "@/components/ui/sonner";
-import { Camera, ClockIcon } from "lucide-react";
+import { Camera, ClockIcon, GitCompare } from "lucide-react";
 import { useState } from "react";
 import AnalysePage from "./pages/AnalysePage";
+import ComparePage from "./pages/ComparePage";
 import HistoryPage from "./pages/HistoryPage";
 import type { AnalysisRecord } from "./utils/storage";
 import { loadAnalyses } from "./utils/storage";
 
-type Tab = "analyse" | "history";
+type Tab = "analyse" | "history" | "compare";
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<Tab>("analyse");
@@ -46,8 +47,10 @@ export default function App() {
       <main className="flex-1 overflow-y-auto pb-20">
         {activeTab === "analyse" ? (
           <AnalysePage analyses={analyses} setAnalyses={setAnalyses} />
-        ) : (
+        ) : activeTab === "history" ? (
           <HistoryPage analyses={analyses} setAnalyses={setAnalyses} />
+        ) : (
+          <ComparePage />
         )}
       </main>
 
@@ -99,6 +102,28 @@ export default function App() {
               </span>
             )}
             {activeTab === "history" && (
+              <span className="absolute bottom-0 w-8 h-0.5 bg-primary rounded-full" />
+            )}
+          </button>
+
+          <button
+            type="button"
+            data-ocid="nav.compare.tab"
+            onClick={() => setActiveTab("compare")}
+            className={`flex-1 flex flex-col items-center justify-center gap-1 py-3 min-h-[56px] transition-colors ${
+              activeTab === "compare"
+                ? "text-primary"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+            aria-label="Compare"
+            aria-current={activeTab === "compare" ? "page" : undefined}
+          >
+            <GitCompare
+              size={20}
+              strokeWidth={activeTab === "compare" ? 2.5 : 1.75}
+            />
+            <span className="text-xs font-medium">Compare</span>
+            {activeTab === "compare" && (
               <span className="absolute bottom-0 w-8 h-0.5 bg-primary rounded-full" />
             )}
           </button>

@@ -177,3 +177,209 @@ export function rgbToHex(r: number, g: number, b: number): string {
     )
     .join("")}`;
 }
+
+/**
+ * RGB (0–255) → HSL (h: 0–360, s: 0–100, l: 0–100)
+ */
+export function rgbToHsl(
+  r: number,
+  g: number,
+  b: number,
+): { h: number; s: number; l: number } {
+  const rn = r / 255;
+  const gn = g / 255;
+  const bn = b / 255;
+
+  const max = Math.max(rn, gn, bn);
+  const min = Math.min(rn, gn, bn);
+  const delta = max - min;
+
+  let h = 0;
+  let s = 0;
+  const l = (max + min) / 2;
+
+  if (delta !== 0) {
+    s = delta / (1 - Math.abs(2 * l - 1));
+
+    if (max === rn) {
+      h = ((gn - bn) / delta) % 6;
+    } else if (max === gn) {
+      h = (bn - rn) / delta + 2;
+    } else {
+      h = (rn - gn) / delta + 4;
+    }
+
+    h = h * 60;
+    if (h < 0) h += 360;
+  }
+
+  return { h, s: s * 100, l: l * 100 };
+}
+
+/**
+ * RGB (0–255) → HSV (h: 0–360, s: 0–100, v: 0–100)
+ */
+export function rgbToHsv(
+  r: number,
+  g: number,
+  b: number,
+): { h: number; s: number; v: number } {
+  const rn = r / 255;
+  const gn = g / 255;
+  const bn = b / 255;
+
+  const max = Math.max(rn, gn, bn);
+  const min = Math.min(rn, gn, bn);
+  const delta = max - min;
+
+  let h = 0;
+  let s = 0;
+  const v = max;
+
+  if (max !== 0) {
+    s = delta / max;
+  }
+
+  if (delta !== 0) {
+    if (max === rn) {
+      h = ((gn - bn) / delta) % 6;
+    } else if (max === gn) {
+      h = (bn - rn) / delta + 2;
+    } else {
+      h = (rn - gn) / delta + 4;
+    }
+
+    h = h * 60;
+    if (h < 0) h += 360;
+  }
+
+  return { h, s: s * 100, v: v * 100 };
+}
+
+/**
+ * CIE 1976 ΔE*ab — perceptual colour difference
+ */
+export function computeDeltaE(
+  lab1: { L: number; a: number; b: number },
+  lab2: { L: number; a: number; b: number },
+): number {
+  const dL = lab2.L - lab1.L;
+  const da = lab2.a - lab1.a;
+  const db = lab2.b - lab1.b;
+  return Math.sqrt(dL * dL + da * da + db * db);
+}
+
+/**
+ * Descriptive label for ΔE*ab value
+ */
+export function deltaELabel(deltaE: number): string {
+  if (deltaE < 1) return "Imperceptible";
+  if (deltaE < 2) return "Just noticeable";
+  if (deltaE < 10) return "Noticeable";
+  if (deltaE <= 50) return "Large difference";
+  return "Very large difference";
+}
+
+// ─── Channel Image Generators ────────────────────────────────────────────────
+
+/**
+ * Linear interpolation between two 3-component colour tuples.
+ */
+function lerp3(
+  t: number,
+  c0: [number, number, number],
+  c1: [number, number, number],
+): [number, number, number] {
+  return [
+    c0[0] + (c1[0] - c0[0]) * t,
+    c0[1] + (c1[1] - c0[1]) * t,
+    c0[2] + (c1[2] - c0[2]) * t,
+  ];
+}
+
+/**
+ * Generate a false-colour canvas data URL for a single Lab channel.
+ *
+ * mode 'L': greyscale — L* 0→100 maps to black→white
+ * mode 'a': green (a*<0) → grey (a*=0) → red (a*>0)  range −128..+127
+ * mode 'b': blue (b*<0) → grey (b*=0) → yellow (b*>0) range −128..+127
+ *
+ * The source image is scaled to at most 400×400 before per-pixel processing
+ * to keep PDF generation fast while still producing a crisp thumbnail.
+ */
+export function generateChannelImage(
+  sourceImg: HTMLImageElement,
+  mode: "L" | "a" | "b",
+): string {
+  const MAX_DIM = 400;
+
+  const nw = sourceImg.naturalWidth || sourceImg.width;
+  const nh = sourceImg.naturalHeight || sourceImg.height;
+
+  // Scale down to MAX_DIM while preserving aspect ratio
+  const scale = Math.min(1, MAX_DIM / Math.max(nw, nh, 1));
+  const w = Math.max(1, Math.round(nw * scale));
+  const h = Math.max(1, Math.round(nh * scale));
+
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return "";
+
+  ctx.drawImage(sourceImg, 0, 0, w, h);
+
+  const imageData = ctx.getImageData(0, 0, w, h);
+  const pixels = imageData.data;
+
+  for (let i = 0; i < pixels.length; i += 4) {
+    const r = pixels[i];
+    const g = pixels[i + 1];
+    const bPx = pixels[i + 2];
+
+    const { L, a, b } = rgbToLab(r, g, bPx);
+
+    let outR: number;
+    let outG: number;
+    let outB: number;
+
+    if (mode === "L") {
+      const grey = Math.round(Math.max(0, Math.min(255, (L / 100) * 255)));
+      outR = grey;
+      outG = grey;
+      outB = grey;
+    } else if (mode === "a") {
+      // a* range −128..+127 → t ∈ [0,1]
+      const t = Math.max(0, Math.min(1, (a + 128) / 255));
+      let rgb: [number, number, number];
+      if (t <= 0.5) {
+        rgb = lerp3(t * 2, [0, 180, 0], [128, 128, 128]);
+      } else {
+        rgb = lerp3((t - 0.5) * 2, [128, 128, 128], [220, 30, 30]);
+      }
+      outR = Math.round(rgb[0]);
+      outG = Math.round(rgb[1]);
+      outB = Math.round(rgb[2]);
+    } else {
+      // b* range −128..+127 → t ∈ [0,1]
+      const t = Math.max(0, Math.min(1, (b + 128) / 255));
+      let rgb: [number, number, number];
+      if (t <= 0.5) {
+        rgb = lerp3(t * 2, [30, 30, 220], [128, 128, 128]);
+      } else {
+        rgb = lerp3((t - 0.5) * 2, [128, 128, 128], [220, 200, 30]);
+      }
+      outR = Math.round(rgb[0]);
+      outG = Math.round(rgb[1]);
+      outB = Math.round(rgb[2]);
+    }
+
+    pixels[i] = outR;
+    pixels[i + 1] = outG;
+    pixels[i + 2] = outB;
+    // alpha unchanged
+  }
+
+  ctx.putImageData(imageData, 0, 0);
+  return canvas.toDataURL("image/png");
+}

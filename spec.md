@@ -1,42 +1,45 @@
 # Food Colour Analyser
 
 ## Current State
-New project. No existing backend or frontend code.
+
+- Single-image analysis page (AnalysePage) that extracts CIE L*a*b*, Chroma, Whiteness Index, and RGB from the central 50% of an uploaded/captured image.
+- History page that lists saved analyses with export (Excel/PDF).
+- Utility functions: `colorUtils.ts` (rgbToLab, rgbToXyz, xyzToLab, chroma, whiteness, hex), `exportUtils.ts`, `storage.ts`.
+- Two-tab navigation: Analyse | History.
+- No image comparison feature exists.
 
 ## Requested Changes (Diff)
 
 ### Add
-- Food image upload functionality (camera capture or file selection, mobile-friendly)
-- Color analysis engine that processes uploaded images and computes:
-  - CIE L* (lightness)
-  - CIE a* (green-red axis)
-  - CIE b* (blue-yellow axis)
-  - Chroma (C* = sqrt(a*² + b*²))
-  - Whiteness Index (WI = 100 - sqrt((100 - L*)² + a*² + b*²))
-- Storage of analysis results with sample name, image reference, and computed values
-- Analysis history list showing all past analyses
-- Export to Excel (.xlsx) using SheetJS (client-side)
-- Export to PDF using jsPDF (client-side)
-- Mobile-responsive layout optimized for Android browser use
+- A third tab "Compare" in the bottom navigation.
+- `ComparePage.tsx` — side-by-side comparison of two food images with:
+  - Image A and Image B upload/camera capture slots.
+  - Trigger button "Compare Colours" that analyses both images.
+  - **Colour Difference** section: ΔE*ab (CIE 1976) with a descriptive scale label (imperceptible / noticeable / large), and a visual delta bar.
+  - **Component-Level Differences (RGB/HEX)**: shows RGB values for A and B, per-channel delta (ΔR, ΔG, ΔB), hex swatches.
+  - **Perceptual Properties (HSL/HSV)**: H, S, L (HSL) and H, S, V (HSV) for A and B with per-property deltas.
+  - **Colorimetric Coordinates (CIELAB)**: L*, a*, b*, Chroma, Whiteness Index for A and B with per-value deltas.
+  - Export comparison as Excel and PDF (new comparison-specific export functions).
+- New utility functions in `colorUtils.ts`:
+  - `rgbToHsl(r, g, b)` → { h, s, l }
+  - `rgbToHsv(r, g, b)` → { h, s, v }
+  - `computeDeltaE(lab1, lab2)` → number (CIE 1976 ΔE*ab = sqrt(ΔL²+Δa²+Δb²))
+  - `deltaELabel(deltaE)` → descriptive string
+- New export functions in `exportUtils.ts`:
+  - `exportComparisonToExcel(comparison, filename)`
+  - `exportComparisonToPDF(comparison, filename)`
 
 ### Modify
-N/A (new project)
+- `App.tsx`: add "Compare" tab with GitCompare icon; pass tab state to nav; render ComparePage.
+- `colorUtils.ts`: add HSL, HSV, ΔE functions.
+- `exportUtils.ts`: add comparison export functions.
 
 ### Remove
-N/A (new project)
+- Nothing removed.
 
 ## Implementation Plan
-1. Backend (Motoko):
-   - Store analysis records: id, sampleName, timestamp, L, a, b, chroma, whitenessIndex, imageData (base64 or blob reference)
-   - CRUD: createAnalysis, getAnalyses, deleteAnalysis
 
-2. Frontend (React + TypeScript):
-   - Landing/home page with upload CTA
-   - Image upload component (file input + camera capture on mobile)
-   - Color extraction: sample pixels from the uploaded image via HTML Canvas, convert RGB → XYZ → CIE L*a*b*
-   - Compute Chroma and Whiteness Index from L*a*b*
-   - Results display card showing all computed values
-   - Save result to backend with a sample name
-   - History page listing all saved analyses
-   - Export buttons: Download Excel (SheetJS/xlsx) and Download PDF (jsPDF)
-   - Mobile-first responsive layout
+1. Add `rgbToHsl`, `rgbToHsv`, `computeDeltaE`, `deltaELabel` to `colorUtils.ts`.
+2. Add `exportComparisonToExcel` and `exportComparisonToPDF` to `exportUtils.ts`.
+3. Create `src/frontend/src/pages/ComparePage.tsx` with full comparison UI.
+4. Update `App.tsx` to add the Compare tab and render `ComparePage`.

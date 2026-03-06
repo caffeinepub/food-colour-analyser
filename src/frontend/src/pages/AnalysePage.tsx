@@ -14,7 +14,11 @@ import {
 } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
 import { toast } from "sonner";
-import { extractColorFromImage, rgbToHex } from "../utils/colorUtils";
+import {
+  extractColorFromImage,
+  generateChannelImage,
+  rgbToHex,
+} from "../utils/colorUtils";
 import { exportToExcel, exportToPDF } from "../utils/exportUtils";
 import {
   type AnalysisRecord,
@@ -214,7 +218,28 @@ export default function AnalysePage({ setAnalyses }: Props) {
       g: labValues.g,
       b_channel: labValues.b_channel,
     };
-    exportToPDF([record], "food-colour-analysis");
+
+    // Generate channel visualisation images when an analysed image is available
+    let channelImages:
+      | { originalUrl: string; lUrl: string; aUrl: string; bUrl: string }
+      | undefined;
+    if (imgRef.current && imageUrl) {
+      try {
+        const lImg = generateChannelImage(imgRef.current, "L");
+        const aImg = generateChannelImage(imgRef.current, "a");
+        const bImg = generateChannelImage(imgRef.current, "b");
+        channelImages = {
+          originalUrl: imageUrl,
+          lUrl: lImg,
+          aUrl: aImg,
+          bUrl: bImg,
+        };
+      } catch (err) {
+        console.warn("Could not generate channel images for PDF:", err);
+      }
+    }
+
+    exportToPDF([record], "food-colour-analysis", channelImages);
     toast.success("PDF downloaded");
   };
 
