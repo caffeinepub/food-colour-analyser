@@ -3,6 +3,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { usePwaInstall } from "@/hooks/usePwaInstall";
 import { Camera, ClockIcon, GitCompare, Smartphone } from "lucide-react";
 import { useState } from "react";
+import { toast } from "sonner";
 import InstallBanner from "./components/InstallBanner";
 import OfflineIndicator from "./components/OfflineIndicator";
 import AnalysePage from "./pages/AnalysePage";
@@ -18,7 +19,19 @@ export default function App() {
   const [analyses, setAnalyses] = useState<AnalysisRecord[]>(() =>
     loadAnalyses(),
   );
-  const { canInstall, triggerInstall } = usePwaInstall();
+  const { canInstall, triggerInstall, isInstalled } = usePwaInstall();
+
+  const handleInstallClick = async () => {
+    if (canInstall) {
+      await triggerInstall();
+    } else {
+      // Show instructions for manual install
+      toast.info(
+        "To install: tap the browser menu (⋮ or Share) and select 'Add to Home Screen'",
+        { duration: 6000 },
+      );
+    }
+  };
 
   return (
     <div className="min-h-screen flex flex-col bg-background text-foreground">
@@ -41,11 +54,11 @@ export default function App() {
             </div>
           </div>
           <div className="ml-auto flex items-center gap-2">
-            {canInstall && (
+            {!isInstalled && (
               <Button
                 size="sm"
                 variant="outline"
-                onClick={triggerInstall}
+                onClick={handleInstallClick}
                 data-ocid="header.install.primary_button"
                 className="h-7 px-2 text-xs border-primary/40 text-primary hover:bg-primary/10 hover:border-primary/60"
               >

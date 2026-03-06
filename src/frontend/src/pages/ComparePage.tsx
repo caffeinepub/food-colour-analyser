@@ -3,6 +3,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Camera,
+  Crop,
   FileSpreadsheet,
   FileText,
   GitCompareArrows,
@@ -12,6 +13,7 @@ import {
 } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
 import { toast } from "sonner";
+import CropModal from "../components/CropModal";
 import {
   computeChroma,
   computeDeltaE,
@@ -154,10 +156,13 @@ function TableHeader() {
 interface ImageSlotProps {
   label: "A" | "B";
   imageUrl: string | null;
+  croppedImageUrl?: string | null;
   sampleName: string;
   onNameChange: (name: string) => void;
   onFileSelect: (file: File) => void;
   onClear: () => void;
+  onCropRequest?: () => void;
+  isCropped?: boolean;
   fileInputRef: React.RefObject<HTMLInputElement | null>;
   cameraInputRef: React.RefObject<HTMLInputElement | null>;
   imgRef: React.RefObject<HTMLImageElement | null>;
@@ -166,10 +171,13 @@ interface ImageSlotProps {
 function ImageSlot({
   label,
   imageUrl,
+  croppedImageUrl,
   sampleName,
   onNameChange,
   onFileSelect,
   onClear,
+  onCropRequest,
+  isCropped,
   fileInputRef,
   cameraInputRef,
   imgRef,
@@ -235,25 +243,45 @@ function ImageSlot({
           </div>
         </div>
       ) : (
-        <div
-          data-ocid={`compare.image_${label.toLowerCase()}.canvas_target`}
-          className="relative rounded-xl overflow-hidden border border-border bg-muted"
-        >
-          <img
-            ref={imgRef}
-            src={imageUrl}
-            alt={`Sample ${label}`}
-            className="w-full object-contain max-h-[160px]"
-            crossOrigin="anonymous"
-          />
-          <button
-            type="button"
-            onClick={onClear}
-            className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-background/80 border border-border flex items-center justify-center hover:bg-destructive/20 transition-colors"
-            aria-label={`Remove sample ${label}`}
+        <div className="space-y-1.5">
+          <div
+            data-ocid={`compare.image_${label.toLowerCase()}.canvas_target`}
+            className="relative rounded-xl overflow-hidden border border-border bg-muted"
           >
-            <X size={12} />
-          </button>
+            <img
+              ref={imgRef}
+              src={croppedImageUrl ?? imageUrl ?? undefined}
+              alt={`Sample ${label}`}
+              className="w-full object-contain max-h-[160px]"
+            />
+            {/* Cropped badge */}
+            {isCropped && (
+              <div className="absolute bottom-1.5 left-1.5 flex items-center gap-1 bg-primary text-primary-foreground rounded-full px-1.5 py-0.5">
+                <Crop size={9} />
+                <span className="text-[9px] font-semibold">Cropped</span>
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={onClear}
+              className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-background/80 border border-border flex items-center justify-center hover:bg-destructive/20 transition-colors"
+              aria-label={`Remove sample ${label}`}
+            >
+              <X size={12} />
+            </button>
+          </div>
+          {/* Crop button */}
+          {onCropRequest && (
+            <button
+              type="button"
+              data-ocid={`compare.image_${label.toLowerCase()}.crop.button`}
+              onClick={onCropRequest}
+              className={`w-full flex items-center justify-center gap-1.5 h-7 rounded-lg border text-[11px] font-medium transition-colors ${accentClass} ${textClass} hover:${bgClass}`}
+            >
+              <Crop size={11} />
+              {isCropped ? "Re-crop" : "Crop"}
+            </button>
+          )}
         </div>
       )}
 
@@ -294,6 +322,10 @@ function ImageSlot({
 export default function ComparePage() {
   const [imageA, setImageA] = useState<string | null>(null);
   const [imageB, setImageB] = useState<string | null>(null);
+  const [croppedImageA, setCroppedImageA] = useState<string | null>(null);
+  const [croppedImageB, setCroppedImageB] = useState<string | null>(null);
+  const [cropModalOpenA, setCropModalOpenA] = useState(false);
+  const [cropModalOpenB, setCropModalOpenB] = useState(false);
   const [nameA, setNameA] = useState("");
   const [nameB, setNameB] = useState("");
   const [isComparing, setIsComparing] = useState(false);
@@ -335,26 +367,46 @@ export default function ComparePage() {
   const clearA = () => {
     if (imageA) URL.revokeObjectURL(imageA);
     setImageA(null);
+    setCroppedImageA(null);
+    setCropModalOpenA(false);
     setResult(null);
   };
 
   const clearB = () => {
     if (imageB) URL.revokeObjectURL(imageB);
     setImageB(null);
+    setCroppedImageB(null);
+    setCropModalOpenB(false);
     setResult(null);
   };
 
   const handleCompare = async () => {
-    if (!imgARef.current || !imgBRef.current) {
+    if (!imageA || !imageB) {
       toast.error("Both images must be loaded");
       return;
     }
     setIsComparing(true);
     try {
-      await new Promise((r) => setTimeout(r, 50));
+      const effectiveUrlA = croppedImageA ?? imageA;
+      const effectiveUrlB = croppedImageB ?? imageB;
 
-      const rawA = extractColorFromImage(imgARef.current);
-      const rawB = extractColorFromImage(imgBRef.current);
+      const [freshImgA, freshImgB] = await Promise.all([
+        new Promise<HTMLImageElement>((resolve, reject) => {
+          const img = new Image();
+          img.onload = () => resolve(img);
+          img.onerror = reject;
+          img.src = effectiveUrlA;
+        }),
+        new Promise<HTMLImageElement>((resolve, reject) => {
+          const img = new Image();
+          img.onload = () => resolve(img);
+          img.onerror = reject;
+          img.src = effectiveUrlB;
+        }),
+      ]);
+
+      const rawA = extractColorFromImage(freshImgA);
+      const rawB = extractColorFromImage(freshImgB);
 
       const labA = rgbToLab(rawA.r, rawA.g, rawA.b_channel);
       const labB = rgbToLab(rawB.r, rawB.g, rawB.b_channel);
@@ -551,10 +603,13 @@ export default function ComparePage() {
         <ImageSlot
           label="A"
           imageUrl={imageA}
+          croppedImageUrl={croppedImageA}
           sampleName={nameA}
           onNameChange={setNameA}
           onFileSelect={handleFileA}
           onClear={clearA}
+          onCropRequest={imageA ? () => setCropModalOpenA(true) : undefined}
+          isCropped={!!croppedImageA}
           fileInputRef={fileARef}
           cameraInputRef={cameraARef}
           imgRef={imgARef}
@@ -562,10 +617,13 @@ export default function ComparePage() {
         <ImageSlot
           label="B"
           imageUrl={imageB}
+          croppedImageUrl={croppedImageB}
           sampleName={nameB}
           onNameChange={setNameB}
           onFileSelect={handleFileB}
           onClear={clearB}
+          onCropRequest={imageB ? () => setCropModalOpenB(true) : undefined}
+          isCropped={!!croppedImageB}
           fileInputRef={fileBRef}
           cameraInputRef={cameraBRef}
           imgRef={imgBRef}
@@ -804,6 +862,30 @@ export default function ComparePage() {
             </div>
           </div>
         </section>
+      )}
+
+      {/* Crop Modals */}
+      {imageA && (
+        <CropModal
+          imageUrl={imageA}
+          open={cropModalOpenA}
+          onConfirm={(url) => {
+            setCroppedImageA(url);
+            setCropModalOpenA(false);
+          }}
+          onCancel={() => setCropModalOpenA(false)}
+        />
+      )}
+      {imageB && (
+        <CropModal
+          imageUrl={imageB}
+          open={cropModalOpenB}
+          onConfirm={(url) => {
+            setCroppedImageB(url);
+            setCropModalOpenB(false);
+          }}
+          onCancel={() => setCropModalOpenB(false)}
+        />
       )}
     </div>
   );

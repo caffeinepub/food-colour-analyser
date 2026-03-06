@@ -3,6 +3,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Camera,
+  Crop,
   Download,
   FileSpreadsheet,
   FileText,
@@ -14,6 +15,7 @@ import {
 } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
 import { toast } from "sonner";
+import CropModal from "../components/CropModal";
 import {
   extractColorFromImage,
   generateChannelImage,
@@ -90,6 +92,8 @@ function MetricCard({
 
 export default function AnalysePage({ setAnalyses }: Props) {
   const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [croppedImageUrl, setCroppedImageUrl] = useState<string | null>(null);
+  const [cropModalOpen, setCropModalOpen] = useState(false);
   const [labValues, setLabValues] = useState<LabValues | null>(null);
   const [sampleName, setSampleName] = useState("");
   const [isAnalysing, setIsAnalysing] = useState(false);
@@ -133,35 +137,41 @@ export default function AnalysePage({ setAnalyses }: Props) {
   };
 
   const handleAnalyse = async () => {
-    if (!imgRef.current || !imageUrl) {
+    if (!imageUrl) {
       toast.error("Please upload an image first");
       return;
     }
-    const url = imageUrl;
+    const effectiveUrl = croppedImageUrl ?? imageUrl;
     setIsAnalysing(true);
     try {
-      // Small delay to let image fully render
-      await new Promise((resolve) => setTimeout(resolve, 50));
-      const result = extractColorFromImage(imgRef.current);
+      // Load a fresh Image object from the effective URL to avoid any ref/CORS issues
+      const freshImg = await new Promise<HTMLImageElement>(
+        (resolve, reject) => {
+          const img = new Image();
+          img.onload = () => resolve(img);
+          img.onerror = reject;
+          img.src = effectiveUrl;
+        },
+      );
+
+      const result = extractColorFromImage(freshImg);
       const hex = rgbToHex(result.r, result.g, result.b_channel);
       const colourName = getColourName(result.r, result.g, result.b_channel);
       setLabValues({ ...result, hex, colourName });
 
       // Generate channel images for on-screen display
-      if (imgRef.current && url) {
-        try {
-          const lImg = generateChannelImage(imgRef.current, "L");
-          const aImg = generateChannelImage(imgRef.current, "a");
-          const bImg = generateChannelImage(imgRef.current, "b");
-          setChannelImages({
-            originalUrl: url,
-            lUrl: lImg,
-            aUrl: aImg,
-            bUrl: bImg,
-          });
-        } catch (e) {
-          console.warn("Channel image generation failed:", e);
-        }
+      try {
+        const lImg = generateChannelImage(freshImg, "L");
+        const aImg = generateChannelImage(freshImg, "a");
+        const bImg = generateChannelImage(freshImg, "b");
+        setChannelImages({
+          originalUrl: effectiveUrl,
+          lUrl: lImg,
+          aUrl: aImg,
+          bUrl: bImg,
+        });
+      } catch (e) {
+        console.warn("Channel image generation failed:", e);
       }
 
       toast.success("Colour analysis complete");
@@ -202,6 +212,8 @@ export default function AnalysePage({ setAnalyses }: Props) {
   const handleReset = () => {
     if (imageUrl) URL.revokeObjectURL(imageUrl);
     setImageUrl(null);
+    setCroppedImageUrl(null);
+    setCropModalOpen(false);
     setLabValues(null);
     setSampleName("");
     setIsSaved(false);
@@ -257,18 +269,27 @@ export default function AnalysePage({ setAnalyses }: Props) {
     };
 
     // Use already-generated channel images if available, otherwise generate fresh
+    const effectiveUrl = croppedImageUrl ?? imageUrl;
     let pdfChannelImages:
       | { originalUrl: string; lUrl: string; aUrl: string; bUrl: string }
       | undefined;
     if (channelImages) {
       pdfChannelImages = channelImages;
-    } else if (imgRef.current && imageUrl) {
+    } else if (effectiveUrl) {
       try {
-        const lImg = generateChannelImage(imgRef.current, "L");
-        const aImg = generateChannelImage(imgRef.current, "a");
-        const bImg = generateChannelImage(imgRef.current, "b");
+        const freshImg = await new Promise<HTMLImageElement>(
+          (resolve, reject) => {
+            const img = new Image();
+            img.onload = () => resolve(img);
+            img.onerror = reject;
+            img.src = effectiveUrl;
+          },
+        );
+        const lImg = generateChannelImage(freshImg, "L");
+        const aImg = generateChannelImage(freshImg, "a");
+        const bImg = generateChannelImage(freshImg, "b");
         pdfChannelImages = {
-          originalUrl: imageUrl,
+          originalUrl: effectiveUrl,
           lUrl: lImg,
           aUrl: aImg,
           bUrl: bImg,
@@ -353,13 +374,21 @@ export default function AnalysePage({ setAnalyses }: Props) {
           >
             <img
               ref={imgRef}
-              src={imageUrl}
+              src={croppedImageUrl ?? imageUrl}
               alt="Food sample"
               className="w-full object-contain max-h-[320px]"
-              crossOrigin="anonymous"
             />
+
+            {/* Cropped badge */}
+            {croppedImageUrl && (
+              <div className="absolute bottom-2 left-2 flex items-center gap-1 bg-primary text-primary-foreground rounded-full px-2 py-0.5">
+                <Crop size={10} />
+                <span className="text-[10px] font-semibold">Cropped</span>
+              </div>
+            )}
+
             {/* Sampling region overlay */}
-            {!labValues && (
+            {!labValues && !croppedImageUrl && (
               <div className="absolute inset-0 flex items-center justify-center">
                 <div
                   className="absolute border-2 border-primary/60 rounded"
@@ -391,6 +420,20 @@ export default function AnalysePage({ setAnalyses }: Props) {
               </div>
             )}
           </div>
+
+          {/* Crop button — only before analysis */}
+          {!labValues && (
+            <Button
+              data-ocid="analyse.crop.button"
+              type="button"
+              variant="outline"
+              className="w-full h-10 border-primary/40 text-primary hover:bg-primary/10 hover:border-primary/60"
+              onClick={() => setCropModalOpen(true)}
+            >
+              <Crop size={15} className="mr-2" />
+              {croppedImageUrl ? "Re-crop Image" : "Crop Image"}
+            </Button>
+          )}
 
           <Button
             variant="ghost"
@@ -691,6 +734,19 @@ export default function AnalysePage({ setAnalyses }: Props) {
             Export PDF
           </Button>
         </div>
+      )}
+
+      {/* Crop Modal */}
+      {imageUrl && (
+        <CropModal
+          imageUrl={imageUrl}
+          open={cropModalOpen}
+          onConfirm={(url) => {
+            setCroppedImageUrl(url);
+            setCropModalOpen(false);
+          }}
+          onCancel={() => setCropModalOpen(false)}
+        />
       )}
     </div>
   );
