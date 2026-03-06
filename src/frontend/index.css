@@ -1,0 +1,206 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ─── Fonts ─────────────────────────────────────────────── */
+@font-face {
+  font-family: "Sora";
+  src: url("/assets/fonts/Sora[wght].woff2") format("woff2");
+  font-weight: 100 800;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Figtree";
+  src: url("/assets/fonts/Figtree[wght].woff2") format("woff2");
+  font-weight: 300 900;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("/assets/fonts/JetBrainsMono[wght].woff2") format("woff2");
+  font-weight: 100 800;
+  font-display: swap;
+}
+
+/* ─── Design Tokens ─────────────────────────────────────── */
+@layer base {
+  :root {
+    --radius: 0.5rem;
+
+    /* Dark-first palette — lab equipment aesthetic */
+    --background: 0.13 0.008 220;
+    --foreground: 0.93 0.015 195;
+    --card: 0.17 0.01 220;
+    --card-foreground: 0.93 0.015 195;
+    --popover: 0.2 0.012 220;
+    --popover-foreground: 0.93 0.015 195;
+
+    /* Teal-green as primary (spectrophotometer green) */
+    --primary: 0.72 0.18 175;
+    --primary-foreground: 0.1 0.008 220;
+
+    --secondary: 0.22 0.015 220;
+    --secondary-foreground: 0.85 0.015 195;
+
+    --muted: 0.19 0.01 220;
+    --muted-foreground: 0.55 0.02 210;
+
+    --accent: 0.65 0.15 175;
+    --accent-foreground: 0.1 0.008 220;
+
+    --destructive: 0.62 0.22 25;
+    --destructive-foreground: 0.98 0.01 25;
+
+    --border: 0.25 0.015 220;
+    --input: 0.25 0.015 220;
+    --ring: 0.72 0.18 175;
+
+    /* Chart colors — CIE Lab colour space inspired */
+    --chart-1: 0.72 0.18 175;
+    --chart-2: 0.65 0.22 35;
+    --chart-3: 0.62 0.18 280;
+    --chart-4: 0.78 0.14 95;
+    --chart-5: 0.68 0.2 330;
+
+    /* Sidebar */
+    --sidebar: 0.11 0.008 220;
+    --sidebar-foreground: 0.93 0.015 195;
+    --sidebar-primary: 0.72 0.18 175;
+    --sidebar-primary-foreground: 0.1 0.008 220;
+    --sidebar-accent: 0.19 0.01 220;
+    --sidebar-accent-foreground: 0.85 0.015 195;
+    --sidebar-border: 0.22 0.012 220;
+    --sidebar-ring: 0.72 0.18 175;
+
+    /* App-specific tokens */
+    --lab-l: 0.82 0.12 95;
+    --lab-a: 0.65 0.22 25;
+    --lab-b: 0.62 0.18 240;
+    --lab-chroma: 0.72 0.18 175;
+    --lab-wi: 0.78 0.1 200;
+
+    --nav-height: 4rem;
+    --header-height: 3.5rem;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  html {
+    color-scheme: dark;
+    -webkit-tap-highlight-color: transparent;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: "Sora", sans-serif;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    overscroll-behavior: none;
+  }
+
+  /* Mono for scientific values */
+  .font-mono {
+    font-family: "JetBrains Mono", monospace;
+  }
+
+  .font-display {
+    font-family: "Figtree", sans-serif;
+  }
+}
+
+/* ─── Utility Classes ────────────────────────────────────── */
+@layer utilities {
+  .lab-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 0.75rem;
+  }
+
+  .safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  /* Scanline texture for lab instrument feel */
+  .scanlines::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      oklch(0 0 0 / 0.04) 2px,
+      oklch(0 0 0 / 0.04) 4px
+    );
+    pointer-events: none;
+    border-radius: inherit;
+  }
+
+  .glow-primary {
+    box-shadow: 0 0 20px oklch(0.72 0.18 175 / 0.3), 0 0 40px oklch(0.72 0.18 175 / 0.1);
+  }
+
+  .metric-card {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .metric-card::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, currentColor, transparent);
+    opacity: 0.6;
+  }
+}
+
+/* ─── Scrollbar ──────────────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+::-webkit-scrollbar-track {
+  background: oklch(0.13 0.008 220);
+}
+::-webkit-scrollbar-thumb {
+  background: oklch(0.35 0.03 220);
+  border-radius: 2px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: oklch(0.72 0.18 175 / 0.7);
+}
+
+/* ─── Focus visible ──────────────────────────────────────── */
+:focus-visible {
+  outline: 2px solid oklch(0.72 0.18 175);
+  outline-offset: 2px;
+}
+
+/* ─── Upload dropzone pulse ──────────────────────────────── */
+@keyframes border-pulse {
+  0%, 100% { border-color: oklch(0.35 0.04 175); }
+  50% { border-color: oklch(0.72 0.18 175 / 0.8); }
+}
+
+.dropzone-pulse {
+  animation: border-pulse 2.5s ease-in-out infinite;
+}
+
+/* ─── Number counter animation ───────────────────────────── */
+@keyframes count-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.count-up {
+  animation: count-up 0.4s ease-out both;
+}
