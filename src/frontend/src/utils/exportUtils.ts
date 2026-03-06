@@ -1,7 +1,113 @@
-import jsPDF from "jspdf";
-import autoTable from "jspdf-autotable";
-import * as XLSX from "xlsx";
 import type { AnalysisRecord } from "./storage";
+
+// ─── CDN Library Loader ───────────────────────────────────
+// jspdf, jspdf-autotable, and xlsx are loaded from CDN at runtime
+// because they are not bundled with the app.
+
+declare global {
+  interface Window {
+    jspdf?: { jsPDF: new (opts?: Record<string, unknown>) => JsPDFDoc };
+    XLSX?: XLSXLib;
+  }
+}
+
+interface JsPDFDoc {
+  autoTable?: (options: Record<string, unknown>) => void;
+  lastAutoTable?: { finalY: number };
+  addPage(): JsPDFDoc;
+  addImage(
+    imageData: string,
+    format: string,
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+  ): JsPDFDoc;
+  text(
+    text: string,
+    x: number,
+    y: number,
+    options?: Record<string, unknown>,
+  ): JsPDFDoc;
+  setFontSize(size: number): JsPDFDoc;
+  setFont(font: string, style?: string): JsPDFDoc;
+  setTextColor(r: number, g: number, b: number): JsPDFDoc;
+  setFillColor(r: number, g: number, b: number): JsPDFDoc;
+  setDrawColor(r: number, g: number, b: number): JsPDFDoc;
+  setLineWidth(width: number): JsPDFDoc;
+  rect(x: number, y: number, w: number, h: number, style?: string): JsPDFDoc;
+  line(x1: number, y1: number, x2: number, y2: number): JsPDFDoc;
+  save(filename: string): void;
+  getNumberOfPages(): number;
+  setPage(page: number): JsPDFDoc;
+  splitTextToSize(text: string, maxWidth: number): string[];
+  getTextWidth(text: string): number;
+}
+
+interface XLSXLib {
+  utils: {
+    book_new(): XLSXWorkBook;
+    aoa_to_sheet(data: unknown[][]): XLSXWorkSheet;
+    book_append_sheet(wb: XLSXWorkBook, ws: XLSXWorkSheet, name: string): void;
+  };
+  writeFile(wb: XLSXWorkBook, filename: string): void;
+}
+
+interface XLSXWorkBook {
+  SheetNames: string[];
+  Sheets: Record<string, XLSXWorkSheet>;
+  [key: string]: unknown;
+}
+
+interface XLSXWorkSheet {
+  "!cols"?: Array<{ wch: number }>;
+  [cell: string]: unknown;
+}
+
+function loadScript(src: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    // Check if already loaded
+    if (document.querySelector(`script[src="${src}"]`)) {
+      resolve();
+      return;
+    }
+    const script = document.createElement("script");
+    script.src = src;
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error(`Failed to load script: ${src}`));
+    document.head.appendChild(script);
+  });
+}
+
+async function loadJsPDF(): Promise<
+  new (
+    opts?: Record<string, unknown>,
+  ) => JsPDFDoc
+> {
+  if (!window.jspdf) {
+    await loadScript(
+      "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js",
+    );
+    // Load autotable plugin after jspdf
+    await loadScript(
+      "https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js",
+    );
+  }
+  if (!window.jspdf) throw new Error("jsPDF not available after script load");
+  return window.jspdf.jsPDF;
+}
+
+async function loadXLSX(): Promise<XLSXLib> {
+  if (!window.XLSX) {
+    await loadScript(
+      "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js",
+    );
+  }
+  if (!window.XLSX) throw new Error("XLSX not available after script load");
+  return window.XLSX;
+}
+
+// ─── Helpers ──────────────────────────────────────────────
 
 function formatDate(timestamp: number): string {
   return new Date(timestamp).toLocaleString("en-GB", {
@@ -18,12 +124,22 @@ function fmt(val: number): string {
   return val.toFixed(2);
 }
 
-type ExportRow = [string, string, string, string, string, string, string];
+type ExportRow = [
+  string,
+  string,
+  string,
+  string,
+  string,
+  string,
+  string,
+  string,
+];
 
 function buildRows(records: AnalysisRecord[]): ExportRow[] {
   return records.map((r) => [
     r.sampleName || "Unnamed Sample",
     formatDate(r.timestamp),
+    r.colorName || "",
     fmt(r.L),
     fmt(r.a),
     fmt(r.b),
@@ -35,6 +151,7 @@ function buildRows(records: AnalysisRecord[]): ExportRow[] {
 const HEADERS: ExportRow = [
   "Sample Name",
   "Date / Time",
+  "Colour Name",
   "L*",
   "a*",
   "b*",
@@ -42,12 +159,13 @@ const HEADERS: ExportRow = [
   "Whiteness Index (WI)",
 ];
 
-// ─── Excel Export ────────────────────────────────────────
+// ─── Excel Export ─────────────────────────────────────────
 
-export function exportToExcel(
+export async function exportToExcel(
   records: AnalysisRecord[],
   filename = "food-colour-analysis",
-): void {
+): Promise<void> {
+  const XLSX = await loadXLSX();
   const wsData: (string | number)[][] = [HEADERS, ...buildRows(records)];
 
   const ws = XLSX.utils.aoa_to_sheet(wsData);
@@ -56,6 +174,7 @@ export function exportToExcel(
   ws["!cols"] = [
     { wch: 24 },
     { wch: 22 },
+    { wch: 18 },
     { wch: 10 },
     { wch: 10 },
     { wch: 10 },
@@ -68,9 +187,9 @@ export function exportToExcel(
   XLSX.writeFile(wb, `${filename}.xlsx`);
 }
 
-// ─── PDF Export ──────────────────────────────────────────
+// ─── PDF Export ───────────────────────────────────────────
 
-export function exportToPDF(
+export async function exportToPDF(
   records: AnalysisRecord[],
   filename = "food-colour-analysis",
   images?: {
@@ -79,10 +198,15 @@ export function exportToPDF(
     aUrl: string;
     bUrl: string;
   },
-): void {
-  const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+): Promise<void> {
+  const JsPDF = await loadJsPDF();
+  const doc = new JsPDF({
+    orientation: "landscape",
+    unit: "mm",
+    format: "a4",
+  });
 
-  // ── Page 1: Data table ──────────────────────────────────
+  // ── Page 1: Data table ─────────────────────────────────
 
   // Header
   doc.setFillColor(22, 30, 46);
@@ -101,43 +225,46 @@ export function exportToPDF(
   doc.text(`Records: ${records.length}`, 200, 20);
 
   // Table
-  autoTable(doc, {
-    startY: 35,
-    head: [HEADERS],
-    body: buildRows(records),
-    theme: "grid",
-    headStyles: {
-      fillColor: [24, 130, 105],
-      textColor: [240, 255, 250],
-      fontStyle: "bold",
-      fontSize: 9,
-      cellPadding: 3,
-    },
-    bodyStyles: {
-      fontSize: 8.5,
-      textColor: [30, 40, 55],
-      cellPadding: 2.5,
-    },
-    alternateRowStyles: {
-      fillColor: [240, 248, 245],
-    },
-    columnStyles: {
-      0: { cellWidth: 50 },
-      1: { cellWidth: 42 },
-      2: { cellWidth: 18, halign: "right" },
-      3: { cellWidth: 18, halign: "right" },
-      4: { cellWidth: 18, halign: "right" },
-      5: { cellWidth: 28, halign: "right" },
-      6: { cellWidth: 36, halign: "right" },
-    },
-    margin: { left: 14, right: 14 },
-    styles: {
-      lineColor: [200, 220, 215],
-      lineWidth: 0.1,
-    },
-  });
+  if (doc.autoTable) {
+    doc.autoTable({
+      startY: 35,
+      head: [HEADERS],
+      body: buildRows(records),
+      theme: "grid",
+      headStyles: {
+        fillColor: [24, 130, 105],
+        textColor: [240, 255, 250],
+        fontStyle: "bold",
+        fontSize: 9,
+        cellPadding: 3,
+      },
+      bodyStyles: {
+        fontSize: 8.5,
+        textColor: [30, 40, 55],
+        cellPadding: 2.5,
+      },
+      alternateRowStyles: {
+        fillColor: [240, 248, 245],
+      },
+      columnStyles: {
+        0: { cellWidth: 46 },
+        1: { cellWidth: 38 },
+        2: { cellWidth: 28 },
+        3: { cellWidth: 16, halign: "right" },
+        4: { cellWidth: 16, halign: "right" },
+        5: { cellWidth: 16, halign: "right" },
+        6: { cellWidth: 26, halign: "right" },
+        7: { cellWidth: 32, halign: "right" },
+      },
+      margin: { left: 14, right: 14 },
+      styles: {
+        lineColor: [200, 220, 215],
+        lineWidth: 0.1,
+      },
+    });
+  }
 
-  // ── Page 2: Channel visualisations (optional) ───────────
+  // ── Page 2: Channel visualisations (optional) ──────────
 
   if (images) {
     doc.addPage();
@@ -182,7 +309,12 @@ export function exportToPDF(
         label: "L* Channel (Lightness)",
         dataUrl: images.lUrl,
       },
-      { col: 0, row: 1, label: "a* Channel (Green–Red)", dataUrl: images.aUrl },
+      {
+        col: 0,
+        row: 1,
+        label: "a* Channel (Green–Red)",
+        dataUrl: images.aUrl,
+      },
       {
         col: 1,
         row: 1,
@@ -225,7 +357,7 @@ export function exportToPDF(
     }
   }
 
-  // ── Footer on all pages ─────────────────────────────────
+  // ── Footer on all pages ───────────────────────────────
   const pageCount = doc.getNumberOfPages();
   for (let i = 1; i <= pageCount; i++) {
     doc.setPage(i);
@@ -245,6 +377,8 @@ export interface ComparisonExportData {
   sampleA: string;
   sampleB: string;
   timestamp: number;
+  A_colorName?: string;
+  B_colorName?: string;
   // CIELab
   A_L: number;
   A_a: number;
@@ -293,18 +427,27 @@ export interface ComparisonExportData {
 
 // ─── Comparison Excel Export ──────────────────────────────
 
-export function exportComparisonToExcel(
+export async function exportComparisonToExcel(
   data: ComparisonExportData,
   filename = "food-colour-comparison",
-): void {
+): Promise<void> {
+  const XLSX = await loadXLSX();
   const f = (v: number) => Number.parseFloat(v.toFixed(2));
   const fd = (v: number) => (v >= 0 ? `+${v.toFixed(2)}` : v.toFixed(2));
 
   const rows: (string | number)[][] = [
     ["Food Colour Analyser — Comparison Report"],
     ["Generated", new Date(data.timestamp).toLocaleString()],
-    ["Sample A", data.sampleA],
-    ["Sample B", data.sampleB],
+    [
+      "Sample A",
+      data.sampleA,
+      ...(data.A_colorName ? ["Colour Name", data.A_colorName] : []),
+    ],
+    [
+      "Sample B",
+      data.sampleB,
+      ...(data.B_colorName ? ["Colour Name", data.B_colorName] : []),
+    ],
     [],
     // ΔE overall
     ["OVERALL COLOUR DIFFERENCE"],
@@ -384,11 +527,16 @@ export function exportComparisonToExcel(
 
 // ─── Comparison PDF Export ────────────────────────────────
 
-export function exportComparisonToPDF(
+export async function exportComparisonToPDF(
   data: ComparisonExportData,
   filename = "food-colour-comparison",
-): void {
-  const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+): Promise<void> {
+  const JsPDF = await loadJsPDF();
+  const doc = new JsPDF({
+    orientation: "landscape",
+    unit: "mm",
+    format: "a4",
+  });
   const f = (v: number) => v.toFixed(2);
   const fd = (v: number) => (v >= 0 ? `+${v.toFixed(2)}` : v.toFixed(2));
 
@@ -404,8 +552,14 @@ export function exportComparisonToPDF(
   doc.setTextColor(180, 200, 210);
   doc.setFontSize(9);
   doc.setFont("helvetica", "normal");
-  doc.text(`Sample A: ${data.sampleA}`, 14, 20);
-  doc.text(`Sample B: ${data.sampleB}`, 14, 26);
+  const labelA = data.A_colorName
+    ? `${data.sampleA} (${data.A_colorName})`
+    : data.sampleA;
+  const labelB = data.B_colorName
+    ? `${data.sampleB} (${data.B_colorName})`
+    : data.sampleB;
+  doc.text(`Sample A: ${labelA}`, 14, 20);
+  doc.text(`Sample B: ${labelB}`, 14, 26);
   doc.text(`Generated: ${new Date(data.timestamp).toLocaleString()}`, 14, 32);
   doc.text(`ΔE*ab: ${f(data.deltaE)} — ${data.deltaELabel}`, 180, 20);
 
@@ -440,122 +594,136 @@ export function exportComparisonToPDF(
 
   let curY = 40;
 
-  // Section: CIELAB
-  doc.setFontSize(9);
-  doc.setFont("helvetica", "bold");
-  doc.setTextColor(92, 219, 183);
-  doc.text("CIELAB COORDINATES", 14, curY);
-  curY += 2;
+  if (doc.autoTable) {
+    // Section: CIELAB
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(92, 219, 183);
+    doc.text("CIELAB COORDINATES", 14, curY);
+    curY += 2;
 
-  autoTable(doc, {
-    startY: curY,
-    head: [["Metric", `A: ${data.sampleA}`, `B: ${data.sampleB}`, "Δ (B − A)"]],
-    body: [
-      ["L* (Lightness)", f(data.A_L), f(data.B_L), fd(data.deltaL)],
-      ["a* (Green–Red)", f(data.A_a), f(data.B_a), fd(data.deltaA)],
-      ["b* (Blue–Yellow)", f(data.A_b), f(data.B_b), fd(data.deltaB)],
-      ["Chroma C*", f(data.A_chroma), f(data.B_chroma), fd(data.deltaChroma)],
-      ["Whiteness Index (WI)", f(data.A_wi), f(data.B_wi), fd(data.deltaWI)],
-      ["ΔE*ab", f(data.deltaE), "", data.deltaELabel],
-    ],
-    theme: "grid",
-    headStyles: HEAD_STYLES,
-    bodyStyles: BODY_STYLES,
-    alternateRowStyles: ALT_ROW,
-    columnStyles: COL_STYLES,
-    margin: MARGIN,
-    styles: STYLES,
-  });
-
-  curY =
-    (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable
-      .finalY + 8;
-
-  // Section: RGB / HEX
-  doc.setFontSize(9);
-  doc.setFont("helvetica", "bold");
-  doc.setTextColor(92, 219, 183);
-  doc.text("RGB / HEX", 14, curY);
-  curY += 2;
-
-  autoTable(doc, {
-    startY: curY,
-    head: [["Metric", `A: ${data.sampleA}`, `B: ${data.sampleB}`, "Δ (B − A)"]],
-    body: [
-      ["R (Red)", f(data.A_r), f(data.B_r), fd(data.deltaR)],
-      ["G (Green)", f(data.A_g), f(data.B_g), fd(data.deltaG)],
-      ["B (Blue)", f(data.A_b_ch), f(data.B_b_ch), fd(data.deltaB_ch)],
-      ["HEX", data.A_hex.toUpperCase(), data.B_hex.toUpperCase(), ""],
-    ],
-    theme: "grid",
-    headStyles: HEAD_STYLES,
-    bodyStyles: BODY_STYLES,
-    alternateRowStyles: ALT_ROW,
-    columnStyles: COL_STYLES,
-    margin: MARGIN,
-    styles: STYLES,
-  });
-
-  curY =
-    (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable
-      .finalY + 8;
-
-  // Section: HSL & HSV (side by side in one table)
-  doc.setFontSize(9);
-  doc.setFont("helvetica", "bold");
-  doc.setTextColor(92, 219, 183);
-  doc.text("HSL / HSV PERCEPTUAL PROPERTIES", 14, curY);
-  curY += 2;
-
-  autoTable(doc, {
-    startY: curY,
-    head: [["Metric", `A: ${data.sampleA}`, `B: ${data.sampleB}`, "Δ (B − A)"]],
-    body: [
-      [
-        "HSL Hue (°)",
-        f(data.A_hsl_h),
-        f(data.B_hsl_h),
-        fd(data.B_hsl_h - data.A_hsl_h),
+    doc.autoTable({
+      startY: curY,
+      head: [
+        ["Metric", `A: ${data.sampleA}`, `B: ${data.sampleB}`, "Δ (B − A)"],
       ],
-      [
-        "HSL Saturation (%)",
-        f(data.A_hsl_s),
-        f(data.B_hsl_s),
-        fd(data.B_hsl_s - data.A_hsl_s),
+      body: [
+        ...(data.A_colorName || data.B_colorName
+          ? [
+              [
+                "Colour Name",
+                data.A_colorName ?? "—",
+                data.B_colorName ?? "—",
+                "",
+              ],
+            ]
+          : []),
+        ["L* (Lightness)", f(data.A_L), f(data.B_L), fd(data.deltaL)],
+        ["a* (Green–Red)", f(data.A_a), f(data.B_a), fd(data.deltaA)],
+        ["b* (Blue–Yellow)", f(data.A_b), f(data.B_b), fd(data.deltaB)],
+        ["Chroma C*", f(data.A_chroma), f(data.B_chroma), fd(data.deltaChroma)],
+        ["Whiteness Index (WI)", f(data.A_wi), f(data.B_wi), fd(data.deltaWI)],
+        ["ΔE*ab", f(data.deltaE), "", data.deltaELabel],
       ],
-      [
-        "HSL Lightness (%)",
-        f(data.A_hsl_l),
-        f(data.B_hsl_l),
-        fd(data.B_hsl_l - data.A_hsl_l),
+      theme: "grid",
+      headStyles: HEAD_STYLES,
+      bodyStyles: BODY_STYLES,
+      alternateRowStyles: ALT_ROW,
+      columnStyles: COL_STYLES,
+      margin: MARGIN,
+      styles: STYLES,
+    });
+
+    curY = (doc.lastAutoTable?.finalY ?? curY) + 8;
+
+    // Section: RGB / HEX
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(92, 219, 183);
+    doc.text("RGB / HEX", 14, curY);
+    curY += 2;
+
+    doc.autoTable({
+      startY: curY,
+      head: [
+        ["Metric", `A: ${data.sampleA}`, `B: ${data.sampleB}`, "Δ (B − A)"],
       ],
-      [
-        "HSV Hue (°)",
-        f(data.A_hsv_h),
-        f(data.B_hsv_h),
-        fd(data.B_hsv_h - data.A_hsv_h),
+      body: [
+        ["R (Red)", f(data.A_r), f(data.B_r), fd(data.deltaR)],
+        ["G (Green)", f(data.A_g), f(data.B_g), fd(data.deltaG)],
+        ["B (Blue)", f(data.A_b_ch), f(data.B_b_ch), fd(data.deltaB_ch)],
+        ["HEX", data.A_hex.toUpperCase(), data.B_hex.toUpperCase(), ""],
       ],
-      [
-        "HSV Saturation (%)",
-        f(data.A_hsv_s),
-        f(data.B_hsv_s),
-        fd(data.B_hsv_s - data.A_hsv_s),
+      theme: "grid",
+      headStyles: HEAD_STYLES,
+      bodyStyles: BODY_STYLES,
+      alternateRowStyles: ALT_ROW,
+      columnStyles: COL_STYLES,
+      margin: MARGIN,
+      styles: STYLES,
+    });
+
+    curY = (doc.lastAutoTable?.finalY ?? curY) + 8;
+
+    // Section: HSL & HSV (side by side in one table)
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(92, 219, 183);
+    doc.text("HSL / HSV PERCEPTUAL PROPERTIES", 14, curY);
+    curY += 2;
+
+    doc.autoTable({
+      startY: curY,
+      head: [
+        ["Metric", `A: ${data.sampleA}`, `B: ${data.sampleB}`, "Δ (B − A)"],
       ],
-      [
-        "HSV Value (%)",
-        f(data.A_hsv_v),
-        f(data.B_hsv_v),
-        fd(data.B_hsv_v - data.A_hsv_v),
+      body: [
+        [
+          "HSL Hue (°)",
+          f(data.A_hsl_h),
+          f(data.B_hsl_h),
+          fd(data.B_hsl_h - data.A_hsl_h),
+        ],
+        [
+          "HSL Saturation (%)",
+          f(data.A_hsl_s),
+          f(data.B_hsl_s),
+          fd(data.B_hsl_s - data.A_hsl_s),
+        ],
+        [
+          "HSL Lightness (%)",
+          f(data.A_hsl_l),
+          f(data.B_hsl_l),
+          fd(data.B_hsl_l - data.A_hsl_l),
+        ],
+        [
+          "HSV Hue (°)",
+          f(data.A_hsv_h),
+          f(data.B_hsv_h),
+          fd(data.B_hsv_h - data.A_hsv_h),
+        ],
+        [
+          "HSV Saturation (%)",
+          f(data.A_hsv_s),
+          f(data.B_hsv_s),
+          fd(data.B_hsv_s - data.A_hsv_s),
+        ],
+        [
+          "HSV Value (%)",
+          f(data.A_hsv_v),
+          f(data.B_hsv_v),
+          fd(data.B_hsv_v - data.A_hsv_v),
+        ],
       ],
-    ],
-    theme: "grid",
-    headStyles: HEAD_STYLES,
-    bodyStyles: BODY_STYLES,
-    alternateRowStyles: ALT_ROW,
-    columnStyles: COL_STYLES,
-    margin: MARGIN,
-    styles: STYLES,
-  });
+      theme: "grid",
+      headStyles: HEAD_STYLES,
+      bodyStyles: BODY_STYLES,
+      alternateRowStyles: ALT_ROW,
+      columnStyles: COL_STYLES,
+      margin: MARGIN,
+      styles: STYLES,
+    });
+  }
 
   // Footer
   const pageCount = doc.getNumberOfPages();

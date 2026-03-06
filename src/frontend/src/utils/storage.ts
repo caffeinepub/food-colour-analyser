@@ -11,6 +11,7 @@ export interface AnalysisRecord {
   r: number;
   g: number;
   b_channel: number;
+  colorName?: string;
 }
 
 const STORAGE_KEY = "food-colour-analyses";

@@ -1,7 +1,10 @@
+import { Button } from "@/components/ui/button";
 import { Toaster } from "@/components/ui/sonner";
-import { Camera, ClockIcon, GitCompare } from "lucide-react";
+import { usePwaInstall } from "@/hooks/usePwaInstall";
+import { Camera, ClockIcon, GitCompare, Smartphone } from "lucide-react";
 import { useState } from "react";
 import InstallBanner from "./components/InstallBanner";
+import OfflineIndicator from "./components/OfflineIndicator";
 import AnalysePage from "./pages/AnalysePage";
 import ComparePage from "./pages/ComparePage";
 import HistoryPage from "./pages/HistoryPage";
@@ -15,6 +18,7 @@ export default function App() {
   const [analyses, setAnalyses] = useState<AnalysisRecord[]>(() =>
     loadAnalyses(),
   );
+  const { canInstall, triggerInstall } = usePwaInstall();
 
   return (
     <div className="min-h-screen flex flex-col bg-background text-foreground">
@@ -37,6 +41,18 @@ export default function App() {
             </div>
           </div>
           <div className="ml-auto flex items-center gap-2">
+            {canInstall && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={triggerInstall}
+                data-ocid="header.install.primary_button"
+                className="h-7 px-2 text-xs border-primary/40 text-primary hover:bg-primary/10 hover:border-primary/60"
+              >
+                <Smartphone size={14} className="mr-1.5" />
+                Install
+              </Button>
+            )}
             <span className="text-xs font-mono text-muted-foreground border border-border rounded px-1.5 py-0.5">
               v1.0
             </span>
@@ -144,6 +160,7 @@ export default function App() {
       />
 
       <InstallBanner />
+      <OfflineIndicator />
     </div>
   );
 }

@@ -383,3 +383,42 @@ export function generateChannelImage(
   ctx.putImageData(imageData, 0, 0);
   return canvas.toDataURL("image/png");
 }
+
+/**
+ * Returns a human-readable colour name based on RGB values.
+ * Uses HSL bucketing: hue, saturation, and lightness bands.
+ */
+export function getColourName(r: number, g: number, b: number): string {
+  const { h, s, l } = rgbToHsl(r, g, b);
+
+  // Achromatic range
+  if (s < 12) {
+    if (l >= 93) return "White";
+    if (l >= 78) return "Light Grey";
+    if (l >= 55) return "Grey";
+    if (l >= 30) return "Dark Grey";
+    return "Black";
+  }
+
+  // Near-white / very light tints
+  if (l >= 88) {
+    if (h >= 30 && h < 70) return "Cream";
+    return "White";
+  }
+
+  // Very dark shades
+  if (l < 15) return "Black";
+
+  // Hue-based naming
+  if (h < 15 || h >= 345) return l < 35 ? "Dark Red" : "Red";
+  if (h < 30) return l < 40 ? "Brown" : s > 60 ? "Orange-Red" : "Terracotta";
+  if (h < 50) return l < 40 ? "Dark Orange" : "Orange";
+  if (h < 65) return l < 50 ? "Dark Yellow" : s < 50 ? "Beige" : "Yellow";
+  if (h < 80) return s < 45 ? "Olive" : "Yellow-Green";
+  if (h < 150) return l < 35 ? "Dark Green" : "Green";
+  if (h < 185) return "Cyan";
+  if (h < 255) return l < 35 ? "Dark Blue" : "Blue";
+  if (h < 290) return "Violet";
+  if (h < 330) return l > 60 ? "Pink" : "Magenta";
+  return l > 55 ? "Pink" : "Dark Pink";
+}

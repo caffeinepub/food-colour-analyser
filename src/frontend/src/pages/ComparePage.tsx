@@ -18,6 +18,7 @@ import {
   computeWhitenessIndex,
   deltaELabel,
   extractColorFromImage,
+  getColourName,
   rgbToHex,
   rgbToHsl,
   rgbToHsv,
@@ -34,6 +35,7 @@ import {
 interface SampleData {
   imageUrl: string;
   name: string;
+  colorName: string;
   L: number;
   a: number;
   b: number;
@@ -364,6 +366,7 @@ export default function ComparePage() {
       const sampleA: SampleData = {
         imageUrl: imageA!,
         name: nameA.trim() || "Sample A",
+        colorName: getColourName(rawA.r, rawA.g, rawA.b_channel),
         L: labA.L,
         a: labA.a,
         b: labA.b,
@@ -380,6 +383,7 @@ export default function ComparePage() {
       const sampleB: SampleData = {
         imageUrl: imageB!,
         name: nameB.trim() || "Sample B",
+        colorName: getColourName(rawB.r, rawB.g, rawB.b_channel),
         L: labB.L,
         a: labB.a,
         b: labB.b,
@@ -421,6 +425,8 @@ export default function ComparePage() {
       sampleA: a.name,
       sampleB: b.name,
       timestamp: Date.now(),
+      A_colorName: a.colorName,
+      B_colorName: b.colorName,
       A_L: a.L,
       A_a: a.a,
       A_b: a.b,
@@ -462,8 +468,9 @@ export default function ComparePage() {
       B_hsv_s: b.hsv.s,
       B_hsv_v: b.hsv.v,
     };
-    exportComparisonToExcel(exportData);
-    toast.success("Excel comparison downloaded");
+    exportComparisonToExcel(exportData)
+      .then(() => toast.success("Excel comparison downloaded"))
+      .catch(() => toast.error("Export failed — please try again"));
   };
 
   const handleExportPDF = () => {
@@ -473,6 +480,8 @@ export default function ComparePage() {
       sampleA: a.name,
       sampleB: b.name,
       timestamp: Date.now(),
+      A_colorName: a.colorName,
+      B_colorName: b.colorName,
       A_L: a.L,
       A_a: a.a,
       A_b: a.b,
@@ -514,8 +523,9 @@ export default function ComparePage() {
       B_hsv_s: b.hsv.s,
       B_hsv_v: b.hsv.v,
     };
-    exportComparisonToPDF(exportData);
-    toast.success("PDF comparison downloaded");
+    exportComparisonToPDF(exportData)
+      .then(() => toast.success("PDF comparison downloaded"))
+      .catch(() => toast.error("Export failed — please try again"));
   };
 
   // ΔE badge color

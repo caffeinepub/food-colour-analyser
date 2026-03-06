@@ -1,56 +1,25 @@
+import { usePwaInstall } from "@/hooks/usePwaInstall";
 import { Smartphone, X } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 
 const DISMISSED_KEY = "pwa-install-dismissed";
 
-interface BeforeInstallPromptEvent extends Event {
-  prompt: () => Promise<void>;
-  userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
-}
-
 export default function InstallBanner() {
-  const [visible, setVisible] = useState(false);
-  const deferredPrompt = useRef<BeforeInstallPromptEvent | null>(null);
+  const { canInstall, triggerInstall } = usePwaInstall();
+  const [dismissed, setDismissed] = useState(
+    () => !!localStorage.getItem(DISMISSED_KEY),
+  );
 
-  useEffect(() => {
-    // Don't show if already dismissed
-    if (localStorage.getItem(DISMISSED_KEY)) return;
-
-    const handler = (e: Event) => {
-      e.preventDefault();
-      deferredPrompt.current = e as BeforeInstallPromptEvent;
-      setVisible(true);
-    };
-
-    const installedHandler = () => {
-      setVisible(false);
-      deferredPrompt.current = null;
-    };
-
-    window.addEventListener("beforeinstallprompt", handler);
-    window.addEventListener("appinstalled", installedHandler);
-
-    return () => {
-      window.removeEventListener("beforeinstallprompt", handler);
-      window.removeEventListener("appinstalled", installedHandler);
-    };
-  }, []);
+  const visible = canInstall && !dismissed;
 
   const handleInstall = async () => {
-    if (!deferredPrompt.current) return;
-    await deferredPrompt.current.prompt();
-    const { outcome } = await deferredPrompt.current.userChoice;
-    if (outcome === "accepted") {
-      setVisible(false);
-      deferredPrompt.current = null;
-    }
+    await triggerInstall();
   };
 
   const handleDismiss = () => {
-    setVisible(false);
+    setDismissed(true);
     localStorage.setItem(DISMISSED_KEY, "1");
-    deferredPrompt.current = null;
   };
 
   return (

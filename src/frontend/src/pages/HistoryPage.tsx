@@ -170,14 +170,14 @@ export default function HistoryPage({ analyses, setAnalyses }: Props) {
     toast.success("Analysis deleted");
   };
 
-  const handleExportAllExcel = () => {
+  const handleExportAllExcel = async () => {
     if (analyses.length === 0) {
       toast.error("No analyses to export");
       return;
     }
     setIsExporting(true);
     try {
-      exportToExcel(analyses, "food-colour-analyses-all");
+      await exportToExcel(analyses, "food-colour-analyses-all");
       toast.success(`Exported ${analyses.length} records to Excel`);
     } catch {
       toast.error("Export failed");
@@ -186,14 +186,14 @@ export default function HistoryPage({ analyses, setAnalyses }: Props) {
     }
   };
 
-  const handleExportAllPDF = () => {
+  const handleExportAllPDF = async () => {
     if (analyses.length === 0) {
       toast.error("No analyses to export");
       return;
     }
     setIsExporting(true);
     try {
-      exportToPDF(analyses, "food-colour-analyses-all");
+      await exportToPDF(analyses, "food-colour-analyses-all");
       toast.success(`Exported ${analyses.length} records to PDF`);
     } catch {
       toast.error("Export failed");

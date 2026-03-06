@@ -17,6 +17,7 @@ import { toast } from "sonner";
 import {
   extractColorFromImage,
   generateChannelImage,
+  getColourName,
   rgbToHex,
 } from "../utils/colorUtils";
 import { exportToExcel, exportToPDF } from "../utils/exportUtils";
@@ -41,6 +42,7 @@ interface LabValues {
   g: number;
   b_channel: number;
   hex: string;
+  colourName: string;
 }
 
 function MetricCard({
@@ -92,6 +94,12 @@ export default function AnalysePage({ setAnalyses }: Props) {
   const [sampleName, setSampleName] = useState("");
   const [isAnalysing, setIsAnalysing] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
+  const [channelImages, setChannelImages] = useState<{
+    originalUrl: string;
+    lUrl: string;
+    aUrl: string;
+    bUrl: string;
+  } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
@@ -129,13 +137,33 @@ export default function AnalysePage({ setAnalyses }: Props) {
       toast.error("Please upload an image first");
       return;
     }
+    const url = imageUrl;
     setIsAnalysing(true);
     try {
       // Small delay to let image fully render
       await new Promise((resolve) => setTimeout(resolve, 50));
       const result = extractColorFromImage(imgRef.current);
       const hex = rgbToHex(result.r, result.g, result.b_channel);
-      setLabValues({ ...result, hex });
+      const colourName = getColourName(result.r, result.g, result.b_channel);
+      setLabValues({ ...result, hex, colourName });
+
+      // Generate channel images for on-screen display
+      if (imgRef.current && url) {
+        try {
+          const lImg = generateChannelImage(imgRef.current, "L");
+          const aImg = generateChannelImage(imgRef.current, "a");
+          const bImg = generateChannelImage(imgRef.current, "b");
+          setChannelImages({
+            originalUrl: url,
+            lUrl: lImg,
+            aUrl: aImg,
+            bUrl: bImg,
+          });
+        } catch (e) {
+          console.warn("Channel image generation failed:", e);
+        }
+      }
+
       toast.success("Colour analysis complete");
     } catch (err) {
       console.error(err);
@@ -163,6 +191,7 @@ export default function AnalysePage({ setAnalyses }: Props) {
       g: labValues.g,
       b_channel: labValues.b_channel,
       imageDataUrl: imageUrl ?? undefined,
+      colorName: labValues.colourName,
     };
     const updated = saveAnalysis(record);
     setAnalyses(updated);
@@ -176,9 +205,10 @@ export default function AnalysePage({ setAnalyses }: Props) {
     setLabValues(null);
     setSampleName("");
     setIsSaved(false);
+    setChannelImages(null);
   };
 
-  const handleExportExcel = () => {
+  const handleExportExcel = async () => {
     if (!labValues) {
       toast.error("Run analysis first");
       return;
@@ -195,12 +225,18 @@ export default function AnalysePage({ setAnalyses }: Props) {
       r: labValues.r,
       g: labValues.g,
       b_channel: labValues.b_channel,
+      colorName: labValues.colourName,
     };
-    exportToExcel([record], "food-colour-analysis");
-    toast.success("Excel file downloaded");
+    try {
+      await exportToExcel([record], "food-colour-analysis");
+      toast.success("Excel file downloaded");
+    } catch (err) {
+      console.error(err);
+      toast.error("Export failed — please try again");
+    }
   };
 
-  const handleExportPDF = () => {
+  const handleExportPDF = async () => {
     if (!labValues) {
       toast.error("Run analysis first");
       return;
@@ -217,18 +253,21 @@ export default function AnalysePage({ setAnalyses }: Props) {
       r: labValues.r,
       g: labValues.g,
       b_channel: labValues.b_channel,
+      colorName: labValues.colourName,
     };
 
-    // Generate channel visualisation images when an analysed image is available
-    let channelImages:
+    // Use already-generated channel images if available, otherwise generate fresh
+    let pdfChannelImages:
       | { originalUrl: string; lUrl: string; aUrl: string; bUrl: string }
       | undefined;
-    if (imgRef.current && imageUrl) {
+    if (channelImages) {
+      pdfChannelImages = channelImages;
+    } else if (imgRef.current && imageUrl) {
       try {
         const lImg = generateChannelImage(imgRef.current, "L");
         const aImg = generateChannelImage(imgRef.current, "a");
         const bImg = generateChannelImage(imgRef.current, "b");
-        channelImages = {
+        pdfChannelImages = {
           originalUrl: imageUrl,
           lUrl: lImg,
           aUrl: aImg,
@@ -239,8 +278,13 @@ export default function AnalysePage({ setAnalyses }: Props) {
       }
     }
 
-    exportToPDF([record], "food-colour-analysis", channelImages);
-    toast.success("PDF downloaded");
+    try {
+      await exportToPDF([record], "food-colour-analysis", pdfChannelImages);
+      toast.success("PDF downloaded");
+    } catch (err) {
+      console.error(err);
+      toast.error("Export failed — please try again");
+    }
   };
 
   return (
@@ -487,6 +531,20 @@ export default function AnalysePage({ setAnalyses }: Props) {
             </span>
           </div>
 
+          {/* Colour Name */}
+          <div className="bg-card rounded-lg border border-border p-3 flex items-center gap-3">
+            <div
+              className="w-10 h-10 rounded-lg border border-border shrink-0 flex items-center justify-center"
+              style={{ backgroundColor: labValues.hex }}
+            />
+            <div className="flex-1 min-w-0">
+              <p className="text-xs text-muted-foreground mb-1">Colour Name</p>
+              <p className="text-sm font-semibold text-foreground">
+                {labValues.colourName}
+              </p>
+            </div>
+          </div>
+
           {/* Sample name + save */}
           <div className="space-y-3">
             <div className="space-y-1.5">
@@ -545,6 +603,46 @@ export default function AnalysePage({ setAnalyses }: Props) {
               </Button>
             </div>
           </div>
+
+          {/* Channel Visualisation Images */}
+          {channelImages && (
+            <section
+              className="space-y-3"
+              data-ocid="analyse.channel_images.panel"
+            >
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-semibold text-foreground uppercase tracking-wider">
+                  Channel Visualisation
+                </h3>
+                <div className="flex-1 h-px bg-border" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                {[
+                  { url: channelImages.originalUrl, label: "Original" },
+                  { url: channelImages.lUrl, label: "L* (Lightness)" },
+                  { url: channelImages.aUrl, label: "a* (Green→Red)" },
+                  { url: channelImages.bUrl, label: "b* (Blue→Yellow)" },
+                ].map(({ url, label }, index) => (
+                  <div
+                    key={label}
+                    className="space-y-1.5"
+                    data-ocid={`analyse.channel_image.item.${index + 1}`}
+                  >
+                    <div className="rounded-lg overflow-hidden border border-border bg-muted aspect-square">
+                      <img
+                        src={url}
+                        alt={label}
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                    <p className="text-xs text-center text-muted-foreground font-medium">
+                      {label}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
         </section>
       )}
 
